@@ -10,6 +10,8 @@ namespace TrafficLightClient
         private bool _allowClose = false;
         private readonly TrafficLightController _controller;
         private readonly CpuMonitor _cpuMonitor;
+        private TrafficLightState _currentState = TrafficLightState.Inactive;
+        private TrafficLightState _preSuspendState = TrafficLightState.Inactive;
 
         public bool EnableCpuMonitorFromArgs { get; set; }
 
@@ -60,6 +62,43 @@ namespace TrafficLightClient
             try { _cpuMonitor.Stop(); } catch { }
             try { _controller?.Dispose(); } catch { }
             try { _tray?.Dispose(); } catch { }
+        }
+
+        public void PrepareForSuspend()
+        {
+            try
+            {
+                _preSuspendState = _currentState;
+            }
+            catch { }
+
+            try { SetState(TrafficLightState.Inactive); } catch { }
+            try { _cpuMonitor.Stop(); } catch { }
+        }
+
+        public void ResumeFromSleep()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => ResumeFromSleep()));
+                return;
+            }
+
+            try
+            {
+                SetState(_preSuspendState);
+            }
+            catch { }
+
+            try
+            {
+                if (ChkCpu.IsChecked.GetValueOrDefault(false))
+                {
+                    _cpuMonitor.Start();
+                    UpdateStatus("CPU monitor enabled");
+                }
+            }
+            catch { }
         }
 
         private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
@@ -155,6 +194,7 @@ namespace TrafficLightClient
         {
             _controller.SetState(state);
             _tray?.SetState(state);
+            _currentState = state;
             UpdateStatus($"State: {state}");
         }
 

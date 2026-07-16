@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.Win32;
 using System.Windows;
 using System.Threading;
 
@@ -41,6 +42,9 @@ namespace TrafficLightClient
             // Ensure startup options (like CPU monitor) are applied even if the window is not shown
             _mainWindow.ApplyStartupOptions();
 
+            // Listen for system power mode changes (suspend/resume)
+            SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
+
             if (startInTray)
             {
                 // start without showing the main window
@@ -58,7 +62,29 @@ namespace TrafficLightClient
             _mutex?.ReleaseMutex();
             _mutex?.Dispose();
             _tray?.Dispose();
+            SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
             base.OnExit(e);
+        }
+
+        private void SystemEvents_PowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+        {
+            try
+            {
+                if (_mainWindow == null)
+                    return;
+
+                if (e.Mode == PowerModes.Suspend)
+                {
+                    // prepare for sleep/hibernate: set inactive and stop monitoring
+                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.PrepareForSuspend());
+                }
+                else if (e.Mode == PowerModes.Resume)
+                {
+                    // restore state after resume
+                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.ResumeFromSleep());
+                }
+            }
+            catch { }
         }
 
         protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
